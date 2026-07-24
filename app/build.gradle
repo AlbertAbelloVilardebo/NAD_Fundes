@@ -1,0 +1,28 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.shad.nad.viewer'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.shad.nad.viewer'
+        minSdk 23
+        targetSdk 35
+        versionCode 3
+        versionName '1.4'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
