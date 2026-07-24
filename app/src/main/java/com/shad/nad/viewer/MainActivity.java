@@ -1,11 +1,11 @@
 package com.shad.nad.viewer;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.net.http.SslError;
-import android.os.Build;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -40,11 +40,11 @@ public final class MainActivity extends Activity {
     private TextView errorText;
     private Uri lockedPage;
     private boolean mainFrameFailed;
+    private boolean sslWarningShown;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         getWindow().setBackgroundDrawable(new ColorDrawable(Color.WHITE));
@@ -52,38 +52,33 @@ public final class MainActivity extends Activity {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.WHITE);
 
-        WebView view = new WebView(this);
-        webView = view;
-        view.setBackgroundColor(Color.WHITE);
-        view.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        view.setLongClickable(false);
-        view.setOnLongClickListener(v -> true);
-
-        FrameLayout.LayoutParams webParams = new FrameLayout.LayoutParams(
+        webView = new WebView(this);
+        webView.setBackgroundColor(Color.WHITE);
+        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        webView.setLongClickable(false);
+        webView.setOnLongClickListener(v -> true);
+        root.addView(webView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT);
-        root.addView(view, webParams);
+                ViewGroup.LayoutParams.MATCH_PARENT));
 
         progressBar = new ProgressBar(this);
         progressBar.setIndeterminate(true);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
-                dp(52), dp(52), Gravity.CENTER);
-        root.addView(progressBar, progressParams);
+        root.addView(progressBar, new FrameLayout.LayoutParams(dp(52), dp(52), Gravity.CENTER));
 
         errorPanel = buildErrorPanel();
-        FrameLayout.LayoutParams errorParams = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT);
-        root.addView(errorPanel, errorParams);
         errorPanel.setVisibility(View.GONE);
+        root.addView(errorPanel, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
 
         setContentView(root);
-        configureWebView(view);
+        configureWebView();
         loadStartPage();
     }
 
-    private void configureWebView(WebView view) {
-        WebSettings settings = view.getSettings();
+    @SuppressLint("SetJavaScriptEnabled")
+    private void configureWebView() {
+        WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
@@ -102,11 +97,11 @@ public final class MainActivity extends Activity {
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
-        cookies.setAcceptThirdPartyCookies(view, true);
+        cookies.setAcceptThirdPartyCookies(webView, true);
 
-        view.setWebChromeClient(new WebChromeClient());
-        view.setWebViewClient(new LockedWebViewClient());
-        view.setDownloadListener(new BlockedDownloadListener());
+        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebViewClient(new LockedWebViewClient());
+        webView.setDownloadListener(new BlockedDownloadListener());
     }
 
     private LinearLayout buildErrorPanel() {
@@ -150,11 +145,9 @@ public final class MainActivity extends Activity {
         retry.setText("Tornar-ho a provar");
         retry.setAllCaps(false);
         retry.setOnClickListener(v -> loadStartPage());
-        LinearLayout.LayoutParams retryParams = new LinearLayout.LayoutParams(
+        panel.addView(retry, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-        panel.addView(retry, retryParams);
-
+                ViewGroup.LayoutParams.WRAP_CONTENT));
         return panel;
     }
 
@@ -177,30 +170,11 @@ public final class MainActivity extends Activity {
         errorPanel.setVisibility(View.VISIBLE);
     }
 
-    private void showNavigationBlocked() {
-        Toast.makeText(this,
-                "Navegació bloquejada: l'app queda limitada al visor NAD.",
-                Toast.LENGTH_SHORT).show();
-    }
-
     private boolean shouldBlockMainFrame(Uri target) {
-        if (target == null) {
-            return true;
-        }
-
+        if (target == null) return true;
         String scheme = lower(target.getScheme());
-        if (!"http".equals(scheme) && !"https".equals(scheme)) {
-            return true;
-        }
-
-        // Es deixa completar la primera cadena de redireccions. Després es fixa
-        // l'esquema, l'host, el port i la ruta de la pàgina final.
-        Uri lock = lockedPage;
-        if (lock == null) {
-            return false;
-        }
-
-        return !sameDocument(lock, target);
+        if (!"http".equals(scheme) && !"https".equals(scheme)) return true;
+        return lockedPage != null && !sameDocument(lockedPage, target);
     }
 
     private static boolean sameDocument(Uri first, Uri second) {
@@ -213,10 +187,7 @@ public final class MainActivity extends Activity {
     }
 
     private static int effectivePort(Uri uri) {
-        int explicit = uri.getPort();
-        if (explicit != -1) {
-            return explicit;
-        }
+        if (uri.getPort() != -1) return uri.getPort();
         return "https".equals(lower(uri.getScheme())) ? 443 : 80;
     }
 
@@ -257,27 +228,19 @@ public final class MainActivity extends Activity {
     private final class LockedWebViewClient extends WebViewClient {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-            if (request == null || request.getUrl() == null) {
-                return true;
-            }
-            if (!request.isForMainFrame()) {
-                return false;
-            }
-            boolean block = shouldBlockMainFrame(request.getUrl());
-            if (block) {
-                showNavigationBlocked();
-            }
-            return block;
+            if (request == null || request.getUrl() == null) return true;
+            if (!request.isForMainFrame()) return false;
+            boolean blocked = shouldBlockMainFrame(request.getUrl());
+            if (blocked) showNavigationBlocked();
+            return blocked;
         }
 
         @Override
         @SuppressWarnings("deprecation")
         public boolean shouldOverrideUrlLoading(WebView view, String url) {
-            boolean block = shouldBlockMainFrame(url == null ? null : Uri.parse(url));
-            if (block) {
-                showNavigationBlocked();
-            }
-            return block;
+            boolean blocked = shouldBlockMainFrame(url == null ? null : Uri.parse(url));
+            if (blocked) showNavigationBlocked();
+            return blocked;
         }
 
         @Override
@@ -311,7 +274,7 @@ public final class MainActivity extends Activity {
             if (request != null && request.isForMainFrame()) {
                 String detail = "Comprova la connexió i torna-ho a provar.";
                 if (error != null && error.getDescription() != null) {
-                    detail = detail + "\n\n" + error.getDescription();
+                    detail += "\n\n" + error.getDescription();
                 }
                 showError(detail);
             }
@@ -319,31 +282,34 @@ public final class MainActivity extends Activity {
         }
 
         @Override
-        @SuppressWarnings("deprecation")
-        public void onReceivedError(WebView view, int errorCode,
-                                    String description, String failingUrl) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-                showError("Comprova la connexió i torna-ho a provar.\n\n" + description);
-            }
-            super.onReceivedError(view, errorCode, description, failingUrl);
-        }
-
-        @Override
         public void onReceivedHttpError(WebView view, WebResourceRequest request,
-                                        WebResourceResponse errorResponse) {
-            if (request != null && request.isForMainFrame() && errorResponse != null) {
+                                        WebResourceResponse response) {
+            if (request != null && request.isForMainFrame() && response != null) {
                 showError("El servidor ha respost amb l'error HTTP "
-                        + errorResponse.getStatusCode()
+                        + response.getStatusCode()
                         + ".\nTorna-ho a provar d'aquí a uns instants.");
             }
-            super.onReceivedHttpError(view, request, errorResponse);
+            super.onReceivedHttpError(view, request, response);
         }
 
         @Override
         public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-            handler.cancel();
-            showError("No s'ha pogut verificar la connexió segura del servidor.");
+            // Excepció provisional sol·licitada: ignora qualsevol error TLS,
+            // independentment de la IP o del host que carregui el WebView.
+            handler.proceed();
+            if (!sslWarningShown) {
+                sslWarningShown = true;
+                Toast.makeText(MainActivity.this,
+                        "Mode provisional: certificat del servidor no verificat.",
+                        Toast.LENGTH_LONG).show();
+            }
         }
+    }
+
+    private void showNavigationBlocked() {
+        Toast.makeText(this,
+                "Navegació bloquejada: l'app queda limitada al visor NAD.",
+                Toast.LENGTH_SHORT).show();
     }
 
     private final class BlockedDownloadListener implements DownloadListener {
