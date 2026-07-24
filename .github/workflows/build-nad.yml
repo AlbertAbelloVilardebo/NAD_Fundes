@@ -55,17 +55,17 @@ jobs:
         run: |
           set -e
           mkdir -p artifact
-          cp app/build/outputs/apk/release/app-release-unsigned.apk artifact/NAD-v1.4-unsigned.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk artifact/NAD-v1.5-unsigned.apk
           cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/zipalign" artifact/zipalign
           cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" artifact/apksigner.jar
           cp server-headers.txt server-result.txt artifact/ 2>/dev/null || true
-          zip -qr artifact/NAD-source-v1.4.zip . \
+          zip -qr artifact/NAD-source-v1.5.zip . \
             -x '.git/*' '.gradle/*' 'app/build/*' 'artifact/*'
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nad-build-v1.4
+          name: nad-build-v1.5
           path: artifact/
           if-no-files-found: error
           retention-days: 7
