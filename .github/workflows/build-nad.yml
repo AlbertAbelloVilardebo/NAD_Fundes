@@ -35,15 +35,28 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Restore PDF-enabled MainActivity
+      - name: Restore NAD v1.7 sources and logo
         shell: bash
         run: |
-          set -e
-          base64 -d .build/MainActivity.java.gz.b64 \
+          set -euo pipefail
+          mkdir -p app/src/main/res/drawable-nodpi
+
+          cat .build/v17/MainActivity.*.b64 \
+            | base64 -d \
             | gzip -dc \
             > app/src/main/java/com/shad/nad/viewer/MainActivity.java
-          echo "c062033fc8843f2aaa47b9178551824b51f7ac41bd6c168b56752e3990216a55  app/src/main/java/com/shad/nad/viewer/MainActivity.java" \
-            | sha256sum --check
+
+          cat .build/v17/logo-banner.*.b64 \
+            | base64 -d \
+            > app/src/main/res/drawable-nodpi/nad_logo_banner.webp
+
+          cat .build/v17/app-icon.*.b64 \
+            | base64 -d \
+            > app/src/main/res/drawable-nodpi/nad_app_icon.webp
+
+          echo "24101aceb807e9be5a9707857f53fcea9fd7c6df24885554b34acde07baabf82  app/src/main/java/com/shad/nad/viewer/MainActivity.java" | sha256sum --check
+          echo "8e08cbb277613aed22df9f4fb4585227b46e7066af7591a8c61afed0949248f4  app/src/main/res/drawable-nodpi/nad_logo_banner.webp" | sha256sum --check
+          echo "d5c0eaf71bedff4d601d59c846742df18c8b67b5bed9491e57dca589a40c5110  app/src/main/res/drawable-nodpi/nad_app_icon.webp" | sha256sum --check
 
       - name: Inspect TLS certificate
         shell: bash
@@ -81,7 +94,7 @@ jobs:
           cat tls-diagnostic.txt
           exit 0
 
-      - name: Check server response in provisional mode
+      - name: Check server response with pinned-certificate compatibility
         shell: bash
         run: |
           set +e
@@ -89,7 +102,7 @@ jobs:
             --dump-header server-headers.txt \
             --output /dev/null \
             --write-out 'final_url=%{url_effective}\nhttp_code=%{http_code}\n' \
-            'http://217.154.181.249/ws/pautestallers/visor2.php' \
+            'https://217.154.181.249/ws/pautestallers/visor2.php' \
             | tee server-result.txt
           exit 0
 
@@ -101,17 +114,17 @@ jobs:
         run: |
           set -e
           mkdir -p artifact
-          cp app/build/outputs/apk/release/app-release-unsigned.apk artifact/NAD-v1.6-unsigned.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk artifact/NAD-v1.7-unsigned.apk
           cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/zipalign" artifact/zipalign
           cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" artifact/apksigner.jar
           cp server-headers.txt server-result.txt tls-diagnostic.txt artifact/ 2>/dev/null || true
-          zip -qr artifact/NAD-source-v1.6.zip . \
+          zip -qr artifact/NAD-source-v1.7.zip . \
             -x '.git/*' '.gradle/*' '.build/*' 'app/build/*' 'artifact/*'
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nad-certificate-diagnostic
+          name: nad-build-v1.7
           path: artifact/
           if-no-files-found: error
           retention-days: 7
