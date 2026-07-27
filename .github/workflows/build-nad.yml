@@ -50,7 +50,7 @@ jobs:
             | base64 -d \
             > app/src/main/res/drawable-nodpi/nad_logo_banner.webp
 
-          cat .build/v17/app-icon.*.b64 \
+          cat .build/v17/icon2.*.b64 \
             | base64 -d \
             > app/src/main/res/drawable-nodpi/nad_app_icon.webp
 
