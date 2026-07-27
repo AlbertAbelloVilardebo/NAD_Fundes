@@ -22,7 +22,7 @@ jobs:
           echo "main_exit=$?" > reconstructed/status.txt
           cat .build/v17/logo-banner.*.b64 | base64 -d > reconstructed/nad_logo_banner.webp
           echo "banner_exit=$?" >> reconstructed/status.txt
-          cat .build/v17/app-icon.*.b64 | base64 -d > reconstructed/nad_app_icon.webp
+          cat .build/v17/icon2.*.b64 | base64 -d > reconstructed/nad_app_icon.webp
           echo "icon_exit=$?" >> reconstructed/status.txt
           sha256sum reconstructed/* | tee reconstructed/sha256.txt
           cat reconstructed/status.txt
