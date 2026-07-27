@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- El visor facilitat usa HTTP. La navegació principal es limita des del WebView. -->
+    <!-- Es manté HTTP només per compatibilitat amb possibles enllaços PDF antics.
+         La pàgina inicial s'obre directament per HTTPS. -->
     <base-config cleartextTrafficPermitted="true" />
 </network-security-config>
