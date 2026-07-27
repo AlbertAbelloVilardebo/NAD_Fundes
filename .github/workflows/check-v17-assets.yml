@@ -1,0 +1,37 @@
+name: Check NAD v1.7 assets
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct files
+        shell: bash
+        run: |
+          mkdir -p reconstructed
+          set +e
+          cat .build/v17/MainActivity.*.b64 | base64 -d | gzip -dc > reconstructed/MainActivity.java
+          echo "main_exit=$?" > reconstructed/status.txt
+          cat .build/v17/logo-banner.*.b64 | base64 -d > reconstructed/nad_logo_banner.webp
+          echo "banner_exit=$?" >> reconstructed/status.txt
+          cat .build/v17/app-icon.*.b64 | base64 -d > reconstructed/nad_app_icon.webp
+          echo "icon_exit=$?" >> reconstructed/status.txt
+          sha256sum reconstructed/* | tee reconstructed/sha256.txt
+          cat reconstructed/status.txt
+
+      - name: Upload reconstructed files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nad-v1.7-reconstructed
+          path: reconstructed/
+          if-no-files-found: error
+          retention-days: 7
