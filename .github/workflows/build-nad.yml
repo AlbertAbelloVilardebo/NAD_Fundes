@@ -50,13 +50,8 @@ jobs:
             | base64 -d \
             > app/src/main/res/drawable-nodpi/nad_logo_banner.webp
 
-          cat .build/v17/icon2.*.b64 \
-            | base64 -d \
-            > app/src/main/res/drawable-nodpi/nad_app_icon.webp
-
           echo "24101aceb807e9be5a9707857f53fcea9fd7c6df24885554b34acde07baabf82  app/src/main/java/com/shad/nad/viewer/MainActivity.java" | sha256sum --check
           echo "8e08cbb277613aed22df9f4fb4585227b46e7066af7591a8c61afed0949248f4  app/src/main/res/drawable-nodpi/nad_logo_banner.webp" | sha256sum --check
-          echo "d5c0eaf71bedff4d601d59c846742df18c8b67b5bed9491e57dca589a40c5110  app/src/main/res/drawable-nodpi/nad_app_icon.webp" | sha256sum --check
 
       - name: Inspect TLS certificate
         shell: bash
