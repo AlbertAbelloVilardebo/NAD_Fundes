@@ -1,0 +1,81 @@
+name: Build NAD APK
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Android platform and build tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Restore PDF-enabled MainActivity
+        shell: bash
+        run: |
+          set -e
+          base64 -d .build/MainActivity.java.gz.b64 \
+            | gzip -dc \
+            > app/src/main/java/com/shad/nad/viewer/MainActivity.java
+          echo "c062033fc8843f2aaa47b9178551824b51f7ac41bd6c168b56752e3990216a55  app/src/main/java/com/shad/nad/viewer/MainActivity.java" \
+            | sha256sum --check
+
+      - name: Check server response
+        shell: bash
+        run: |
+          set +e
+          curl --location --insecure --max-time 30 \
+            --dump-header server-headers.txt \
+            --output /dev/null \
+            --write-out 'final_url=%{url_effective}\nhttp_code=%{http_code}\n' \
+            'http://217.154.181.249/ws/pautestallers/visor2.php' \
+            | tee server-result.txt
+          exit 0
+
+      - name: Build unsigned release APK
+        run: gradle --no-daemon :app:assembleRelease
+
+      - name: Prepare downloadable build files
+        shell: bash
+        run: |
+          set -e
+          mkdir -p artifact
+          cp app/build/outputs/apk/release/app-release-unsigned.apk artifact/NAD-v1.6-unsigned.apk
+          cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/zipalign" artifact/zipalign
+          cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" artifact/apksigner.jar
+          cp server-headers.txt server-result.txt artifact/ 2>/dev/null || true
+          zip -qr artifact/NAD-source-v1.6.zip . \
+            -x '.git/*' '.gradle/*' '.build/*' 'app/build/*' 'artifact/*'
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nad-build-v1.6
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 7
