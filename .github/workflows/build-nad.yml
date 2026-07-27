@@ -1,0 +1,125 @@
+name: Build NAD APK
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Android platform and build tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Restore NAD v1.7 sources and logo
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/res/drawable-nodpi
+
+          cat .build/v17/MainActivity.*.b64 \
+            | base64 -d \
+            | gzip -dc \
+            > app/src/main/java/com/shad/nad/viewer/MainActivity.java
+
+          cat .build/v17/logo-banner.*.b64 \
+            | base64 -d \
+            > app/src/main/res/drawable-nodpi/nad_logo_banner.webp
+
+          echo "24101aceb807e9be5a9707857f53fcea9fd7c6df24885554b34acde07baabf82  app/src/main/java/com/shad/nad/viewer/MainActivity.java" | sha256sum --check
+          echo "8e08cbb277613aed22df9f4fb4585227b46e7066af7591a8c61afed0949248f4  app/src/main/res/drawable-nodpi/nad_logo_banner.webp" | sha256sum --check
+
+      - name: Inspect TLS certificate
+        shell: bash
+        run: |
+          set +e
+          {
+            echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo
+            echo '=== CURL WITH NORMAL CERTIFICATE VALIDATION ==='
+            curl --location --max-time 30 --verbose --output /dev/null \
+              'http://217.154.181.249/ws/pautestallers/visor2.php'
+            echo "curl_exit=$?"
+            echo
+            echo '=== OPENSSL HANDSHAKE AND CHAIN VALIDATION ==='
+            timeout 30 openssl s_client \
+              -connect 217.154.181.249:443 \
+              -servername 217.154.181.249 \
+              -showcerts \
+              -verify_return_error \
+              </dev/null
+            echo "openssl_exit=$?"
+            echo
+            echo '=== LEAF CERTIFICATE SUMMARY ==='
+            timeout 30 openssl s_client \
+              -connect 217.154.181.249:443 \
+              -servername 217.154.181.249 \
+              -showcerts \
+              </dev/null 2>/dev/null \
+              | openssl x509 -noout \
+                  -subject -issuer -serial -dates \
+                  -fingerprint -sha256 \
+                  -ext subjectAltName
+            echo "summary_exit=$?"
+          } > tls-diagnostic.txt 2>&1
+          cat tls-diagnostic.txt
+          exit 0
+
+      - name: Check server response with pinned-certificate compatibility
+        shell: bash
+        run: |
+          set +e
+          curl --location --insecure --max-time 30 \
+            --dump-header server-headers.txt \
+            --output /dev/null \
+            --write-out 'final_url=%{url_effective}\nhttp_code=%{http_code}\n' \
+            'https://217.154.181.249/ws/pautestallers/visor2.php' \
+            | tee server-result.txt
+          exit 0
+
+      - name: Build unsigned release APK
+        run: gradle --no-daemon :app:assembleRelease
+
+      - name: Prepare downloadable build files
+        shell: bash
+        run: |
+          set -e
+          mkdir -p artifact
+          cp app/build/outputs/apk/release/app-release-unsigned.apk artifact/NAD-v1.7-unsigned.apk
+          cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/zipalign" artifact/zipalign
+          cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" artifact/apksigner.jar
+          cp server-headers.txt server-result.txt tls-diagnostic.txt artifact/ 2>/dev/null || true
+          zip -qr artifact/NAD-source-v1.7.zip . \
+            -x '.git/*' '.gradle/*' '.build/*' 'app/build/*' 'artifact/*'
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nad-build-v1.7
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 7
